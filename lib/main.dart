@@ -3,6 +3,7 @@ import 'theme/app_theme.dart';
 import 'screens/quick_capture_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const QuickCaptureApp());
 }
 

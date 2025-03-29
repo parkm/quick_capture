@@ -3,12 +3,14 @@ class Note {
   final DateTime createdAt;
   final String directory;
   final String title;
+  final String? url;
 
   Note({
     required this.content,
     required this.createdAt,
     required this.directory,
     required this.title,
+    this.url,
   });
 
   String get filename {
@@ -23,4 +25,11 @@ class Note {
   }
 
   String get path => '$directory/$filename';
+
+  String get formattedContent {
+    if (url != null && url!.isNotEmpty) {
+      return '$url\n\n$content';
+    }
+    return content;
+  }
 }

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/storage_service.dart';
 import '../services/obsidian_service.dart';
+import '../services/receive_intent_service.dart';
 import '../widgets/directory_selector.dart';
 import '../widgets/status_message.dart';
 import '../widgets/save_button.dart';
+import '../widgets/url_input_field.dart';
 
 class QuickCaptureScreen extends StatefulWidget {
   const QuickCaptureScreen({super.key});
@@ -15,8 +17,10 @@ class QuickCaptureScreen extends StatefulWidget {
 
 class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   final TextEditingController _textController = TextEditingController();
+  final TextEditingController _urlController = TextEditingController();
   final StorageService _storageService = StorageService();
   final ObsidianService _obsidianService = ObsidianService();
+  final ReceiveIntentService _receiveIntentService = ReceiveIntentService();
 
   String? _selectedDirectory;
   String? _statusMessage;
@@ -26,6 +30,27 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   void initState() {
     super.initState();
     _loadSavedDirectory();
+    _initializeIntentHandling();
+  }
+
+  Future<void> _initializeIntentHandling() async {
+    await _receiveIntentService.initializeReceiveIntent();
+    _checkForSharedContent();
+  }
+
+  Future<void> _checkForSharedContent() async {
+    final sharedText = await _storageService.getSharedText();
+    final sharedUrl = await _storageService.getSharedUrl();
+
+    if (mounted) {
+      if (sharedText != null && sharedText.isNotEmpty) {
+        _textController.text = sharedText;
+      }
+
+      if (sharedUrl != null && sharedUrl.isNotEmpty) {
+        _urlController.text = sharedUrl;
+      }
+    }
   }
 
   Future<void> _loadSavedDirectory() async {
@@ -75,14 +100,17 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     });
 
     try {
-      // Save the note
+      // Save the note with URL if available
+      final url = _urlController.text.isNotEmpty ? _urlController.text : null;
       final filePath = await _storageService.saveNote(
         _textController.text,
-        _selectedDirectory!
+        _selectedDirectory!,
+        url: url,
       );
 
-      // Clear the text field
+      // Clear the fields
       _textController.clear();
+      _urlController.clear();
 
       // Try to open in Obsidian (Android only)
       final obsidianResult = await _obsidianService.openInObsidian(filePath, context);
@@ -102,6 +130,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   @override
   void dispose() {
     _textController.dispose();
+    _urlController.dispose();
     super.dispose();
   }
 
@@ -126,6 +155,13 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
               DirectorySelector(
                 selectedDirectory: _selectedDirectory,
                 onSelectDirectory: _selectDirectory,
+              ),
+
+              const SizedBox(height: 16),
+
+              // URL input field
+              UrlInputField(
+                controller: _urlController,
               ),
 
               const SizedBox(height: 16),
