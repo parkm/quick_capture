@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const QuickCaptureApp());
@@ -80,11 +81,34 @@ class _QuickCapturePageState extends State<QuickCapturePage> {
   String? _statusMessage;
   bool _isSaving = false;
 
+  static const String _directorySaveKey = 'selected_directory';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedDirectory();
+  }
+
+  Future<void> _loadSavedDirectory() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _selectedDirectory = prefs.getString(_directorySaveKey);
+    });
+  }
+
+  Future<void> _saveDirectory(String directory) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_directorySaveKey, directory);
+  }
+
   Future<void> _selectDirectory() async {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
 
       if (selectedDirectory != null) {
+        // Save the selected directory to SharedPreferences
+        await _saveDirectory(selectedDirectory);
+
         setState(() {
           _selectedDirectory = selectedDirectory;
           _statusMessage = null;
