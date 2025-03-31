@@ -4,13 +4,11 @@ import 'dart:io';
 import '../services/storage_service.dart';
 import '../services/obsidian_service.dart';
 import '../services/receive_intent_service.dart';
-import '../widgets/directory_selector.dart';
 import '../widgets/status_message.dart';
-import '../widgets/save_button.dart';
 import '../widgets/url_input_field.dart';
-import '../widgets/attachment_button.dart';
 import '../widgets/attachment_list.dart';
 import '../models/file_attachment.dart';
+import 'settings_screen.dart';
 
 class QuickCaptureScreen extends StatefulWidget {
   const QuickCaptureScreen({super.key});
@@ -30,7 +28,6 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   String? _statusMessage;
   bool _isSaving = false;
   List<FileAttachment> _attachments = [];
-  bool _isDirectoryExpanded = false;
 
   @override
   void initState() {
@@ -75,21 +72,14 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     }
   }
 
-  Future<void> _selectDirectory() async {
-    try {
-      final directory = await FilePicker.platform.getDirectoryPath();
-      if (directory != null) {
-        await _storageService.saveDirectory(directory);
-        setState(() {
-          _selectedDirectory = directory;
-          _statusMessage = null;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'Error selecting directory: $e';
-      });
-    }
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsScreen()),
+    ).then((_) {
+      // Refresh directory when returning from settings
+      _loadSavedDirectory();
+    });
   }
 
   Future<void> _saveNote() async {
@@ -102,7 +92,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
 
     if (_selectedDirectory == null) {
       setState(() {
-        _statusMessage = 'Please select a directory first';
+        _statusMessage = 'Please set a save directory in Settings';
       });
       return;
     }
@@ -213,12 +203,6 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     });
   }
 
-  void _toggleDirectoryExpanded() {
-    setState(() {
-      _isDirectoryExpanded = !_isDirectoryExpanded;
-    });
-  }
-
   @override
   void dispose() {
     _textController.dispose();
@@ -240,6 +224,30 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
         elevation: 0,
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'settings') {
+                _openSettings();
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              return [
+                const PopupMenuItem<String>(
+                  value: 'settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings, size: 20),
+                      SizedBox(width: 8),
+                      Text('Settings'),
+                    ],
+                  ),
+                ),
+              ];
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -247,68 +255,6 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Top section with directory selector
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 48,
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colorScheme.outline.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: InkWell(
-                  onTap: _toggleDirectoryExpanded,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.folder,
-                          color: colorScheme.primary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _selectedDirectory ?? 'Select Directory',
-                            style: textTheme.bodyMedium,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Icon(
-                          _isDirectoryExpanded
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Expandable directory section
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: _isDirectoryExpanded ? 56 : 0,
-                curve: Curves.easeInOut,
-                child: _isDirectoryExpanded
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: DirectorySelector(
-                          selectedDirectory: _selectedDirectory,
-                          onSelectDirectory: _selectDirectory,
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-
-              const SizedBox(height: 12),
-
               // URL input field - always visible
               UrlInputField(
                 controller: _urlController,

@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/file_attachment.dart';
-import 'package:path/path.dart' as path;
 
 class AttachmentButton extends StatelessWidget {
   final Function(List<FileAttachment>) onAttachmentsAdded;
