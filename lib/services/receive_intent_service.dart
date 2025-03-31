@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'storage_service.dart';
+import '../models/file_attachment.dart';
 
 class ReceiveIntentService {
   static const platform = MethodChannel('app.quick.capture/share');
@@ -15,9 +16,17 @@ class ReceiveIntentService {
       if (sharedData != null) {
         final String? sharedText = sharedData['text'];
         final String? sharedUrl = sharedData['url'];
+        final List<dynamic>? sharedFilePaths = sharedData['filePaths'];
 
-        if (sharedText != null || sharedUrl != null) {
-          await _storageService.saveSharedData(sharedText, sharedUrl);
+        // Convert to list of strings
+        final List<String> filePaths = sharedFilePaths?.map((path) => path.toString()).toList() ?? [];
+
+        if (sharedText != null || sharedUrl != null || filePaths.isNotEmpty) {
+          await _storageService.saveSharedData(
+            sharedText,
+            sharedUrl,
+            sharedFilePaths: filePaths,
+          );
         }
       }
     } on PlatformException catch (e) {
@@ -31,8 +40,16 @@ class ReceiveIntentService {
         final Map<dynamic, dynamic> sharedData = call.arguments;
         final String? sharedText = sharedData['text'];
         final String? sharedUrl = sharedData['url'];
+        final List<dynamic>? sharedFilePaths = sharedData['filePaths'];
 
-        await _storageService.saveSharedData(sharedText, sharedUrl);
+        // Convert to list of strings
+        final List<String> filePaths = sharedFilePaths?.map((path) => path.toString()).toList() ?? [];
+
+        await _storageService.saveSharedData(
+          sharedText,
+          sharedUrl,
+          sharedFilePaths: filePaths,
+        );
         return true;
       default:
         return null;

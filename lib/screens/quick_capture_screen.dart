@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import '../services/storage_service.dart';
 import '../services/obsidian_service.dart';
 import '../services/receive_intent_service.dart';
@@ -7,6 +8,9 @@ import '../widgets/directory_selector.dart';
 import '../widgets/status_message.dart';
 import '../widgets/save_button.dart';
 import '../widgets/url_input_field.dart';
+import '../widgets/attachment_button.dart';
+import '../widgets/attachment_list.dart';
+import '../models/file_attachment.dart';
 
 class QuickCaptureScreen extends StatefulWidget {
   const QuickCaptureScreen({super.key});
@@ -25,6 +29,8 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   String? _selectedDirectory;
   String? _statusMessage;
   bool _isSaving = false;
+  List<FileAttachment> _attachments = [];
+  bool _isDirectoryExpanded = false;
 
   @override
   void initState() {
@@ -41,6 +47,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   Future<void> _checkForSharedContent() async {
     final sharedText = await _storageService.getSharedText();
     final sharedUrl = await _storageService.getSharedUrl();
+    final sharedFileAttachments = await _storageService.getSharedFileAttachments();
 
     if (mounted) {
       if (sharedText != null && sharedText.isNotEmpty) {
@@ -49,6 +56,12 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
 
       if (sharedUrl != null && sharedUrl.isNotEmpty) {
         _urlController.text = sharedUrl;
+      }
+
+      if (sharedFileAttachments.isNotEmpty) {
+        setState(() {
+          _attachments = sharedFileAttachments;
+        });
       }
     }
   }
@@ -100,17 +113,21 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     });
 
     try {
-      // Save the note with URL if available
+      // Save the note with URL and attachments if available
       final url = _urlController.text.isNotEmpty ? _urlController.text : null;
       final filePath = await _storageService.saveNote(
         _textController.text,
         _selectedDirectory!,
         url: url,
+        attachments: _attachments,
       );
 
       // Clear the fields
       _textController.clear();
       _urlController.clear();
+      setState(() {
+        _attachments = [];
+      });
 
       // Try to open in Obsidian (Android only)
       final obsidianResult = await _obsidianService.openInObsidian(filePath, context);
@@ -127,6 +144,81 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     }
   }
 
+  void _handleAttachmentsAdded(List<FileAttachment> newAttachments) {
+    setState(() {
+      _attachments.addAll(newAttachments);
+    });
+  }
+
+  // Direct implementation of file picking functionality
+  Future<void> _pickAttachments() async {
+    try {
+      // Get the allowed extensions from the FileAttachment model
+      final allowedExtensions = FileAttachment.supportedExtensions
+          .map((ext) => ext.substring(1)) // Remove leading dot
+          .toList();
+
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: allowedExtensions,
+        allowMultiple: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final attachments = <FileAttachment>[];
+
+        for (final file in result.files) {
+          if (file.path != null && file.name.isNotEmpty) {
+            // Check if file is supported
+            if (FileAttachment.isSupported(file.name)) {
+              attachments.add(
+                FileAttachment(
+                  file: File(file.path!),
+                  originalFilename: file.name,
+                ),
+              );
+            } else {
+              // Show error for unsupported file type
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Unsupported file type: ${file.name}'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            }
+          }
+        }
+
+        if (attachments.isNotEmpty) {
+          _handleAttachmentsAdded(attachments);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking files: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeAttachment(int index) {
+    setState(() {
+      _attachments.removeAt(index);
+    });
+  }
+
+  void _toggleDirectoryExpanded() {
+    setState(() {
+      _isDirectoryExpanded = !_isDirectoryExpanded;
+    });
+  }
+
   @override
   void dispose() {
     _textController.dispose();
@@ -137,13 +229,17 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quick Capture'),
+        title: Text('Quick Capture', style: textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.bold,
+        )),
+        centerTitle: false,
         elevation: 0,
-        backgroundColor: colorScheme.surfaceVariant,
-        foregroundColor: colorScheme.onSurfaceVariant,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
       ),
       body: SafeArea(
         child: Padding(
@@ -151,53 +247,187 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Directory selector
-              DirectorySelector(
-                selectedDirectory: _selectedDirectory,
-                onSelectDirectory: _selectDirectory,
-              ),
-
-              const SizedBox(height: 16),
-
-              // URL input field
-              UrlInputField(
-                controller: _urlController,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Status message
-              if (_statusMessage != null) ...[
-                StatusMessage(message: _statusMessage),
-                const SizedBox(height: 16),
-              ],
-
-              // Expanding area for text input
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  decoration: InputDecoration(
-                    hintText: 'Enter your text here...',
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerLow,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+              // Top section with directory selector
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: InkWell(
+                  onTap: _toggleDirectoryExpanded,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.folder,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedDirectory ?? 'Select Directory',
+                            style: textTheme.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Icon(
+                          _isDirectoryExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ],
                     ),
-                    contentPadding: const EdgeInsets.all(16),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 16),
+              // Expandable directory section
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                height: _isDirectoryExpanded ? 56 : 0,
+                curve: Curves.easeInOut,
+                child: _isDirectoryExpanded
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: DirectorySelector(
+                          selectedDirectory: _selectedDirectory,
+                          onSelectDirectory: _selectDirectory,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
 
-              // Submit button
-              SaveButton(
-                isSaving: _isSaving,
-                onSave: _saveNote,
+              const SizedBox(height: 12),
+
+              // URL input field - always visible
+              UrlInputField(
+                controller: _urlController,
+              ),
+
+              const SizedBox(height: 12),
+
+              // Main content area with text field
+              Expanded(
+                child: Card(
+                  elevation: 0,
+                  color: colorScheme.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: colorScheme.outlineVariant.withOpacity(0.5),
+                      width: 1,
+                    ),
+                  ),
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: TextField(
+                      controller: _textController,
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      style: textTheme.bodyLarge,
+                      decoration: InputDecoration.collapsed(
+                        hintText: 'Enter your text here...',
+                        hintStyle: textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Attachments section (always reserve space for it)
+              if (_attachments.isNotEmpty) ...[
+                const SizedBox(height: 12),
+
+                // Attachment header
+                Row(
+                  children: [
+                    Icon(
+                      Icons.attach_file,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Attachments (${_attachments.length})',
+                      style: textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 4),
+
+                // Attachment list with horizontally scrollable squares
+                AttachmentList(
+                  attachments: _attachments,
+                  onRemove: _removeAttachment,
+                ),
+              ],
+
+              // Status message
+              if (_statusMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12.0, bottom: 4.0),
+                  child: StatusMessage(message: _statusMessage),
+                ),
+
+              const SizedBox(height: 12),
+
+              // Action buttons row
+              Row(
+                children: [
+                  // Attachment button
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      icon: const Icon(Icons.attach_file),
+                      label: const Text('Add Files'),
+                      onPressed: _pickAttachments,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12.0),
+
+                  // Save button
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      icon: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            )
+                          )
+                        : const Icon(Icons.save),
+                      label: Text(_isSaving ? 'Saving...' : 'Save Note'),
+                      onPressed: _isSaving ? null : _saveNote,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12.0),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
