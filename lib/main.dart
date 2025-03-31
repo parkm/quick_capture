@@ -13,6 +13,7 @@ class QuickCaptureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Quick Capture',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

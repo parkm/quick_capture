@@ -1,5 +1,5 @@
 name: quick_capture
-description: "A new Flutter project."
+description: "A flutter app for quickly capturing notes and adding them to your Obsidian vault."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -41,6 +41,8 @@ dependencies:
   url_launcher: ^6.2.5
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.14.3
+
   flutter_test:
     sdk: flutter
 
