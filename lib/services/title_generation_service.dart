@@ -31,7 +31,7 @@ class TitleGenerationService {
 
     // If there's only one sentence, use a simplified approach
     if (sentences.length == 1) {
-      return _shortenText(sentences.first, 50);
+      return _sanitizeForFilename(_shortenText(sentences.first, 50));
     }
 
     // Tokenize and clean each sentence
@@ -46,8 +46,18 @@ class TitleGenerationService {
     // Select the highest scored sentence as the summary
     final highestScoredSentence = _selectHighestScoredSentence(scoredSentences);
 
-    // Shorten if necessary
-    return _shortenText(highestScoredSentence, 50);
+    // Shorten if necessary and sanitize for filename use
+    return _sanitizeForFilename(_shortenText(highestScoredSentence, 50));
+  }
+
+  /// Sanitizes a string to be safely used as a filename across platforms
+  String _sanitizeForFilename(String text) {
+    // Remove characters that are problematic in filenames across platforms
+    // This covers Windows, macOS, Linux, and Android restrictions
+    return text
+        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '') // Remove invalid chars
+        .replaceAll(RegExp(r'\s+'), ' ')                // Normalize whitespace
+        .trim();
   }
 
   /// Splits text into sentences
